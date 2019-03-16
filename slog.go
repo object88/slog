@@ -2,48 +2,40 @@ package slog
 
 import (
 	// Ensure that OIDC is available
-	"fmt"
-
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
-	// corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"github.com/object88/slog/kubernetes"
+	util "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
 
+type Message struct{}
+type PodStatus struct{}
+
 type Slog struct {
-	f cmdutil.Factory
+	w *kubernetes.Watcher
 
-	clientset *kubernetes.Clientset
+	f util.Factory
 
-	namespace string
+	messageOut   chan<- Message
+	podStatusOut chan<- PodStatus
 }
 
-func NewSlog(factory cmdutil.Factory, service string, namespace string) *Slog {
+// NewSlog will return a new instance of a Slug struct
+func NewSlog(factory util.Factory, messageOut chan<- Message, podStatusOut chan<- PodStatus) *Slog {
 	s := &Slog{
-		f:         factory,
-		namespace: namespace,
+		f:            factory,
+		messageOut:   messageOut,
+		podStatusOut: podStatusOut,
 	}
 
 	return s
 }
 
+// Connect will establish a RESTful connection to a Kubernetes cluster
 func (s *Slog) Connect() error {
 	var err error
-
-	clientConfig := s.f.ToRawKubeConfigLoader()
-	// apiConfig, err := clientConfig.RawConfig()
-	// if err != nil {
-	// 	return err
-	// }
-
-	restClientConfig, err := clientConfig.ClientConfig()
-	if err != nil {
-		return err
-	}
-
-	s.clientset, err = kubernetes.NewForConfig(restClientConfig)
+	s.w = kubernetes.NewWatcher(s.f, "ecp-superquux")
+	err = s.w.Connect()
 	if err != nil {
 		return err
 	}
@@ -51,24 +43,58 @@ func (s *Slog) Connect() error {
 	return nil
 }
 
-func (s *Slog) Load() error {
-	lo := metav1.ListOptions{}
+func (s *Slog) Load(namespace string) error {
+	// lo := metav1.ListOptions{}
 
-	fmt.Printf("Namespace: %s\n", s.namespace)
+	// pods := s.clientset.CoreV1().Pods(namespace)
 
-	pods, err := s.clientset.CoreV1().Pods(s.namespace).List(lo)
-	if err != nil {
-		return err
-	}
+	// podList, err := pods.List(lo)
+	// if err != nil {
+	// 	return err
+	// }
 
-	podNames := make([]string, len(pods.Items))
-	for k, v := range pods.Items {
-		podNames[k] = v.Name
-	}
+	// podNames := make([]string, len(podList.Items))
+	// for k, v := range podList.Items {
+	// 	podNames[k] = v.Name
+	// }
 
-	fmt.Printf("Pod names:\n")
-	for _, n := range podNames {
-		fmt.Printf("%s\n", n)
-	}
+	// fmt.Printf("Pod names:\n")
+	// for _, n := range podNames {
+	// 	fmt.Printf("  %s\n", n)
+	// }
+
+	// emc, err := external_metrics.NewForConfig(s.restClientConfig)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// // Want to verify that this resource exists
+	// mi := emc.NamespacedMetrics(namespace)
+	// _, err = mi.List("*", labels.Everything())
+	// if err != nil {
+	// 	fmt.Printf("Nope: %s\n", err.Error())
+	// 	return err
+	// }
+
+	// watch, err := pods.Watch(metav1.ListOptions{
+	// 	LabelSelector: "",
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+	// for event := range watch.ResultChan() {
+	// 	fmt.Printf("Type: %v\n", event.Type)
+	// 	p, ok := event.Object.(*v1.Pod)
+	// 	if !ok {
+	// 		return errors.Errorf("unexpected type")
+	// 	}
+	// 	fmt.Printf("Statuses:\n")
+	// 	for k, v := range p.Status.ContainerStatuses {
+	// 		fmt.Printf("  %d: %#v\n", k, v)
+	// 	}
+	// 	// fmt.Printf("statuses: %#v\n", p.Status.ContainerStatuses)
+	// 	fmt.Printf("phase: %s\n", p.Status.Phase)
+	// }
+
 	return nil
 }

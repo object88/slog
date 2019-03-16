@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/object88/slog"
+	"github.com/object88/slog/tui"
 	"github.com/spf13/cobra"
 	utilflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -65,14 +66,26 @@ func (rc *rootCommand) execute(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	s := slog.NewSlog(rc.factory, args[0], *rc.kubeConfigFlags.Namespace)
+	messageChannel := make(chan slog.Message)
+	podStatusChannel := make(chan slog.PodStatus)
+
+	s := slog.NewSlog(rc.factory, messageChannel, podStatusChannel)
 
 	err := s.Connect()
 	if err != nil {
 		return err
 	}
 
-	err = s.Load()
+	go func() {
+		s.Load(*rc.kubeConfigFlags.Namespace)
+	}()
+	// err = s.Load()
+	// if err != nil {
+	// 	return err
+	// }
+
+	// This is blocking
+	err = tui.Run(messageChannel, podStatusChannel)
 	if err != nil {
 		return err
 	}
