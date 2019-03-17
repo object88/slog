@@ -50,12 +50,27 @@ func Test_Watchers_Connect(t *testing.T) {
 
 func Test_Watchers_Load(t *testing.T) {
 	tcs := []struct {
-		name      string
-		namespace string
+		name         string
+		namespace    string
+		resourceType constants.ResourceType
+		expectError  bool
 	}{
 		{
-			name:      "load pods",
-			namespace: "foo",
+			name:         "load deployments",
+			namespace:    "foo",
+			resourceType: constants.Deployments,
+		},
+		{
+			name:         "bad resource type",
+			namespace:    "foo",
+			resourceType: constants.ResourceType("bork"),
+			expectError:  true,
+		},
+		{
+			name:         "empty resource type",
+			namespace:    "foo",
+			resourceType: constants.ResourceType(""),
+			expectError:  true,
 		},
 	}
 	for _, tc := range tcs {
@@ -70,8 +85,10 @@ func Test_Watchers_Load(t *testing.T) {
 			c := make(chan watch.Event)
 			defer close(c)
 
-			mwf.EXPECT().Fetch(constants.Deployments).Return(mw, nil).Times(1)
-			mw.EXPECT().ResultChan().Return(c).Times(1)
+			if !tc.expectError {
+				mwf.EXPECT().Fetch(tc.resourceType).Return(mw, nil).Times(1)
+				mw.EXPECT().ResultChan().Return(c).Times(1)
+			}
 
 			w := NewWatcher(mcf, tc.namespace)
 			if w == nil {
@@ -81,7 +98,16 @@ func Test_Watchers_Load(t *testing.T) {
 			// Fake the WatcherFetcher, so we don't have to call `Connect`
 			w.wf = mwf
 
-			w.Load(constants.Deployments)
+			err := w.Load(tc.resourceType)
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error; did not get one")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Got unexpected error from `Load`: %s", err.Error())
+				}
+			}
 
 		})
 	}

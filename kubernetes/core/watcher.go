@@ -71,6 +71,10 @@ func (w *Watcher) Connect() error {
 
 // Load starts the loading procedure for the given resource type
 func (w *Watcher) Load(resource constants.ResourceType) error {
+	if err := resource.Validate(); err != nil {
+		return err
+	}
+
 	w.watchersl.Lock()
 
 	if _, ok := w.watchers[resource]; ok {
