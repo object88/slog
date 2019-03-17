@@ -4,7 +4,8 @@ import (
 	// Ensure that OIDC is available
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
-	"github.com/object88/slog/kubernetes"
+	"github.com/object88/slog/kubernetes/client"
+	"github.com/object88/slog/kubernetes/core"
 	util "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
 
@@ -12,7 +13,7 @@ type Message struct{}
 type PodStatus struct{}
 
 type Slog struct {
-	w *kubernetes.Watcher
+	w *core.Watcher
 
 	f util.Factory
 
@@ -34,7 +35,8 @@ func NewSlog(factory util.Factory, messageOut chan<- Message, podStatusOut chan<
 // Connect will establish a RESTful connection to a Kubernetes cluster
 func (s *Slog) Connect() error {
 	var err error
-	s.w = kubernetes.NewWatcher(s.f, "ecp-superquux")
+	cf := client.NewClientFactory(s.f)
+	s.w = core.NewWatcher(cf, "ecp-superquux")
 	err = s.w.Connect()
 	if err != nil {
 		return err

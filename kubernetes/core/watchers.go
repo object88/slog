@@ -1,4 +1,4 @@
-package kubernetes
+package core
 
 import (
 	"sync"
@@ -7,20 +7,12 @@ import (
 	// Ensure that OIDC is available
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/object88/slog/internal/constants"
+	"github.com/object88/slog/kubernetes/client"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	clientv1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/util"
-)
-
-// ResourceType describes the K8S types available
-type ResourceType string
-
-const (
-	Deployments ResourceType = "deployments"
-	Pods        ResourceType = "pods"
 )
 
 // Watcher observes K8S resources
@@ -28,45 +20,31 @@ type Watcher struct {
 	namespace string
 	timeout   time.Duration
 
-	watchers  map[ResourceType]watch.Interface
+	watchers  map[constants.ResourceType]watch.Interface
 	watchersl sync.Locker
 
-	f  util.Factory
-	wf watcherFetcher
-
-	// clientset        *kubernetes.Clientset
-	// restClientConfig *rest.Config
+	cf client.ClientFactory
+	wf WatcherFetcher
 }
 
 // NewWatcher returns a new instance of a watcher struct.  The inputs are not
 // validated
-func NewWatcher(factory util.Factory, namespace string) *Watcher {
+func NewWatcher(cf client.ClientFactory, namespace string) *Watcher {
 	w := &Watcher{
-		f:         factory,
+		cf:        cf,
 		namespace: namespace,
-		watchers:  map[ResourceType]watch.Interface{},
+		watchers:  map[constants.ResourceType]watch.Interface{},
 		watchersl: &sync.Mutex{},
 	}
 	return w
 }
 
 func (w *Watcher) Connect() error {
-	if w.f == nil {
-		return errors.Errorf("No factory")
+	if w.cf == nil {
+		return errors.New("Watcher does not have clientFactory; cannot connect")
 	}
 
-	// clientConfig := w.f.ToRawKubeConfigLoader()
-	// apiConfig, err := clientConfig.RawConfig()
-	// if err != nil {
-	// 	return err
-	// }
-
-	restClientConfig, err := w.f.ToRESTConfig() // clientConfig.ClientConfig()
-	if err != nil {
-		return err
-	}
-
-	v1client, err := clientv1.NewForConfig(restClientConfig)
+	v1client, err := w.cf.V1Client()
 	if err != nil {
 		return err
 	}
@@ -77,23 +55,22 @@ func (w *Watcher) Connect() error {
 		timeout:   30 * time.Second,
 	}
 
-	// w.clientset, err = kubernetes.NewForConfig(restClientConfig)
-	// if err != nil {
-	// 	return err
-	// }
-
 	// Validate that the namespace exists
 	opts := metav1.GetOptions{}
-	_, err = v1client.Namespaces().Get(w.namespace, opts)
+	ns, err := v1client.Namespaces().Get(w.namespace, opts)
 	if err != nil {
 		return err
+	}
+
+	if ns == nil {
+		return errors.Errorf("Could not find namespace with name '%s'", w.namespace)
 	}
 
 	return nil
 }
 
 // Load starts the loading procedure for the given resource type
-func (w *Watcher) Load(resource ResourceType) error {
+func (w *Watcher) Load(resource constants.ResourceType) error {
 	w.watchersl.Lock()
 
 	if _, ok := w.watchers[resource]; ok {
@@ -101,7 +78,7 @@ func (w *Watcher) Load(resource ResourceType) error {
 		return nil
 	}
 
-	wtch, err := w.wf.fetch(resource)
+	wtch, err := w.wf.Fetch(resource)
 	if err != nil {
 		w.watchersl.Unlock()
 		return err
@@ -145,7 +122,7 @@ func (w *Watcher) Stop() {
 	}
 
 	// Be sure to clear the map
-	w.watchers = map[ResourceType]watch.Interface{}
+	w.watchers = map[constants.ResourceType]watch.Interface{}
 
 	w.watchersl.Unlock()
 }

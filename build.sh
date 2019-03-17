@@ -19,4 +19,6 @@ go generate ./...
 echo "Building..."
 go build -ldflags "-s -w" -mod=readonly -mod=vendor -o ./bin/slog ./main/main.go
 
+go test ./... -count=1
+
 echo "Done."
