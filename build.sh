@@ -1,6 +1,24 @@
 #! /usr/bin/env bash
+set -e
 
 cd $(dirname "$0")
+
+DO_TEST=true
+DO_VERIFY=true
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    --no-test)
+      DO_TEST=false
+      shift
+      ;;
+    --no-verify)
+      DO_VERIFY=false
+      shift
+      ;;
+  esac  
+done
 
 mkdir -p ./bin
 mkdir -p ./mocks
@@ -13,12 +31,20 @@ fi
 
 export GO111MODULE=on
 
+if $DO_VERIFY; then
+  echo "Verifying modules"
+  go mod verify
+fi
+
 echo "Running generator"
 go generate ./...
 
 echo "Building..."
 go build -ldflags "-s -w" -mod=readonly -mod=vendor -o ./bin/slog ./main/main.go
 
-go test ./... -count=1
+if $DO_TEST; then
+  echo "Running tests"
+  go test ./... -count=1
+fi
 
 echo "Done."

@@ -36,8 +36,8 @@ func NewSlog(factory util.Factory, messageOut chan<- Message, podStatusOut chan<
 func (s *Slog) Connect() error {
 	var err error
 	cf := client.NewClientFactory(s.f)
-	s.w = core.NewWatcher(cf, "ecp-superquux")
-	err = s.w.Connect()
+	s.w = core.NewWatcher()
+	err = s.w.Connect(cf, "ecp-superquux")
 	if err != nil {
 		return err
 	}
