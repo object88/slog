@@ -35,6 +35,7 @@ require (
 	github.com/huandu/xstrings v1.2.0 // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
 	github.com/json-iterator/go v1.1.5 // indirect
 	github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect

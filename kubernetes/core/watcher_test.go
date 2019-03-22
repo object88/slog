@@ -3,6 +3,9 @@ package core
 import (
 	"testing"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/golang/mock/gomock"
 	"github.com/object88/slog/internal/constants"
 	"github.com/object88/slog/mocks"
@@ -119,12 +122,42 @@ func Test_Watcher_Load(t *testing.T) {
 	}
 }
 
+type thing struct {
+	name string
+}
+
+func newThing(name string) *thing {
+	return &thing{
+		name: name,
+	}
+}
+
+func (t *thing) GetObjectKind() schema.ObjectKind {
+	return schema.EmptyObjectKind
+}
+
+func (t *thing) DeepCopyObject() runtime.Object {
+	return &thing{
+		name: t.name,
+	}
+}
+
 func Test_Watcher_Watch(t *testing.T) {
 	tcs := []struct {
-		name string
+		name   string
+		things []runtime.Object
 	}{
 		{
-			name: "pass",
+			name:   "no things",
+			things: []runtime.Object{},
+		},
+		{
+			name:   "single thing",
+			things: []runtime.Object{newThing("a")},
+		},
+		{
+			name:   "many thing",
+			things: []runtime.Object{newThing("a"), newThing("b"), newThing("c")},
 		},
 	}
 
@@ -136,25 +169,51 @@ func Test_Watcher_Watch(t *testing.T) {
 			c := make(chan watch.Event)
 			mw := mocks.NewMockInterface(ctrl)
 			mw.EXPECT().ResultChan().Return(c).Times(1)
+			mw.EXPECT().Stop().Do(func() {
+				close(c)
+			}).Times(1)
 
 			mwf := mocks.NewMockWatcherFetcher(ctrl)
 			mwf.EXPECT().Fetch(constants.Deployments).Return(mw, nil).Times(1)
 
+			// Create the Watcher and fake the WatcherFetcher, so we don't have to
+			// call `Connect`
 			w := NewWatcher()
-			if w == nil {
-				t.Errorf("Received nil watcher")
-			}
-
-			// Fake the WatcherFetcher, so we don't have to call `Connect`
 			w.wf = mwf
+
+			var results []*watch.Event
+			done := make(chan int)
+
+			go func() {
+				for e := range w.Listen() {
+					results = append(results, e)
+				}
+				done <- 1
+			}()
 
 			err := w.Load(constants.Deployments)
 			if err != nil {
 				t.Errorf("Got unexpected error from `Load`: %s", err.Error())
 			}
 
-			// TODO: Test for what happens when events are fed into the channel
+			// Fake some events
+			for _, obj := range tc.things {
+				c <- watch.Event{
+					Type:   watch.Added,
+					Object: obj,
+				}
+			}
 
+			// Stop, and wait to be done.
+			w.Stop()
+			<-done
+
+			// Check the results.
+			for k, v := range results {
+				if v.Object.(*thing).name != tc.things[k].(*thing).name {
+					t.Errorf("Mismatched")
+				}
+			}
 		})
 	}
 }
