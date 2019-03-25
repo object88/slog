@@ -1,11 +1,17 @@
 package slog
 
 import (
+	"fmt"
+
 	// Ensure that OIDC is available
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 
+	"github.com/object88/slog/internal/constants"
 	"github.com/object88/slog/kubernetes/client"
 	"github.com/object88/slog/kubernetes/core"
+	"github.com/pkg/errors"
+	v1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	util "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
 
@@ -13,7 +19,7 @@ type Message struct{}
 type PodStatus struct{}
 
 type Slog struct {
-	w *core.Watcher
+	w core.Watcher
 
 	f util.Factory
 
@@ -46,6 +52,26 @@ func (s *Slog) Connect() error {
 }
 
 func (s *Slog) Load(namespace string) error {
+	c := s.w.Listen()
+	if c == nil {
+		return errors.New("Failed to get channel")
+	}
+	fmt.Printf("Got listener\n")
+	go func(c <-chan *watch.Event) {
+		for e := range c {
+			d, ok := e.Object.(*v1.Deployment)
+			if !ok {
+				continue
+			}
+			fmt.Printf("Deployment name: %s\n", d.Name)
+		}
+	}(c)
+	err := s.w.Load(constants.Deployments)
+	if err != nil {
+		return errors.Wrapf(err, "Load failed")
+	}
+	fmt.Printf("Loaded for deployments\n")
+
 	// lo := metav1.ListOptions{}
 
 	// pods := s.clientset.CoreV1().Pods(namespace)

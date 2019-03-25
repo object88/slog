@@ -1,8 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/object88/slog"
-	"github.com/object88/slog/tui"
 	"github.com/spf13/cobra"
 	utilflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -77,7 +78,10 @@ func (rc *rootCommand) execute(cmd *cobra.Command, args []string) error {
 	}
 
 	go func() {
-		s.Load(*rc.kubeConfigFlags.Namespace)
+		err := s.Load(*rc.kubeConfigFlags.Namespace)
+		if err != nil {
+			fmt.Printf("Load failed:\n\t%s\n", err.Error())
+		}
 	}()
 	// err = s.Load()
 	// if err != nil {
@@ -85,10 +89,14 @@ func (rc *rootCommand) execute(cmd *cobra.Command, args []string) error {
 	// }
 
 	// This is blocking
-	err = tui.Run(messageChannel, podStatusChannel)
-	if err != nil {
-		return err
-	}
+	// err = tui.Run(messageChannel, podStatusChannel)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// Just, wait for ever.
+	done := make(chan int)
+	<-done
 
 	return nil
 }

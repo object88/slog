@@ -14,11 +14,15 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-type WatchEvent struct {
+// Watcher observes K8S resources
+type Watcher interface {
+	Connect(cf client.ClientFactory, namespace string) error
+	Listen() <-chan *watch.Event
+	Load(resource constants.ResourceType) error
+	Stop()
 }
 
-// Watcher observes K8S resources
-type Watcher struct {
+type watcher struct {
 	namespace string
 	timeout   time.Duration
 
@@ -29,10 +33,10 @@ type Watcher struct {
 	wf       WatcherFetcher
 }
 
-// NewWatcher returns a new instance of a watcher struct.  The inputs are not
+// NewWatcher returns a new instance of a Watcher struct.  The inputs are not
 // validated
-func NewWatcher() *Watcher {
-	w := &Watcher{
+func NewWatcher() Watcher {
+	w := &watcher{
 		pipeline:  channels.NewWatchChannel(),
 		wf:        NewWatcherFetcher(),
 		watchers:  map[constants.ResourceType]watch.Interface{},
@@ -41,7 +45,7 @@ func NewWatcher() *Watcher {
 	return w
 }
 
-func (w *Watcher) Connect(cf client.ClientFactory, namespace string) error {
+func (w *watcher) Connect(cf client.ClientFactory, namespace string) error {
 	if w.wf == nil {
 		return errors.New("Watcher does not have watcherFetcher; cannot connect")
 	}
@@ -49,12 +53,12 @@ func (w *Watcher) Connect(cf client.ClientFactory, namespace string) error {
 	return w.wf.Connect(cf, namespace)
 }
 
-func (w *Watcher) Listen() <-chan *watch.Event {
+func (w *watcher) Listen() <-chan *watch.Event {
 	return w.pipeline.Out()
 }
 
 // Load starts the loading procedure for the given resource type
-func (w *Watcher) Load(resource constants.ResourceType) error {
+func (w *watcher) Load(resource constants.ResourceType) error {
 	w.watchersl.Lock()
 	defer w.watchersl.Unlock()
 
@@ -110,7 +114,7 @@ func (w *Watcher) Load(resource constants.ResourceType) error {
 	return nil
 }
 
-func (w *Watcher) Stop() {
+func (w *watcher) Stop() {
 	w.watchersl.Lock()
 	defer w.watchersl.Unlock()
 

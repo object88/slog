@@ -10,7 +10,6 @@ import (
 	"github.com/object88/slog/internal/constants"
 	"github.com/object88/slog/mocks"
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -30,19 +29,17 @@ func Test_Watcher_Connect(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mcv1c := mocks.NewMockCoreV1Interface(ctrl)
 			mcf := mocks.NewMockClientFactory(ctrl)
-			mns := mocks.NewMockNamespaceInterface(ctrl)
-
-			ns := v1.Namespace{}
-			mns.EXPECT().Get(tc.namespace, gomock.Any()).Return(&ns, nil).Times(1)
-			mcv1c.EXPECT().Namespaces().Return(mns).Times(1)
-			mcf.EXPECT().V1Client().Return(mcv1c, nil).Times(1)
+			mwf := mocks.NewMockWatcherFetcher(ctrl)
+			mwf.EXPECT().Connect(mcf, tc.namespace).Return(nil)
 
 			w := NewWatcher()
 			if w == nil {
 				t.Errorf("Received nil watcher")
 			}
+
+			w0 := w.(*watcher)
+			w0.wf = mwf
 
 			err := w.Connect(mcf, tc.namespace)
 			if err != nil {
@@ -95,9 +92,10 @@ func Test_Watcher_Load(t *testing.T) {
 			if w == nil {
 				t.Errorf("Received nil watcher")
 			}
+			w0 := w.(*watcher)
 
 			// Fake the WatcherFetcher, so we don't have to call `Connect`
-			w.wf = mwf
+			w0.wf = mwf
 
 			err := w.Load(tc.resourceType)
 			if tc.expectError {
@@ -111,7 +109,7 @@ func Test_Watcher_Load(t *testing.T) {
 				t.Errorf("Got unexpected error from `Load`: %s", err.Error())
 			}
 
-			k8sw, ok := w.watchers[tc.resourceType]
+			k8sw, ok := w0.watchers[tc.resourceType]
 			if !ok {
 				t.Errorf("Watchers map does not include resource type")
 			} else if k8sw != mw {
@@ -179,7 +177,8 @@ func Test_Watcher_Watch(t *testing.T) {
 			// Create the Watcher and fake the WatcherFetcher, so we don't have to
 			// call `Connect`
 			w := NewWatcher()
-			w.wf = mwf
+			w0 := w.(*watcher)
+			w0.wf = mwf
 
 			var results []*watch.Event
 			done := make(chan int)

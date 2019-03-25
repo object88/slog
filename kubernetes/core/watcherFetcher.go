@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientv1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	extv1 "k8s.io/client-go/kubernetes/typed/extensions/v1beta1"
 )
 
 // WatcherFetcher gets a watch.Interface for the given resource type
@@ -20,6 +21,7 @@ type WatcherFetcher interface {
 
 type watcherFetch struct {
 	client    clientv1.CoreV1Interface
+	extClient extv1.ExtensionsV1beta1Interface
 	namespace string
 	timeout   time.Duration
 }
@@ -33,6 +35,11 @@ func NewWatcherFetcher() *watcherFetch {
 func (wf *watcherFetch) Connect(cf client.ClientFactory, namespace string) error {
 	if wf == nil || cf == nil || namespace == "" {
 		return errors.Errorf("Nil or invalid pointer receiver or arguments")
+	}
+
+	extv1client, err := cf.ExtV1Client()
+	if err != nil {
+		return err
 	}
 
 	v1client, err := cf.V1Client()
@@ -52,6 +59,7 @@ func (wf *watcherFetch) Connect(cf client.ClientFactory, namespace string) error
 	}
 
 	wf.client = v1client
+	wf.extClient = extv1client
 	wf.namespace = namespace
 
 	return nil
@@ -76,6 +84,16 @@ func (wf *watcherFetch) Fetch(resource constants.ResourceType) (watch.Interface,
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(wf.timeout).
 		Watch()
+
+	if err != nil {
+		wtch, err = wf.extClient.RESTClient().
+			Get().
+			Namespace(wf.namespace).
+			Resource(string(resource)).
+			VersionedParams(&opts, scheme.ParameterCodec).
+			Timeout(wf.timeout).
+			Watch()
+	}
 
 	return wtch, err
 }
