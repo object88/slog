@@ -10,7 +10,8 @@ import (
 	"github.com/object88/slog/kubernetes/client"
 	"github.com/object88/slog/kubernetes/core"
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	v1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/watch"
 	util "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 )
@@ -59,57 +60,34 @@ func (s *Slog) Load(namespace string) error {
 	fmt.Printf("Got listener\n")
 	go func(c <-chan *watch.Event) {
 		for e := range c {
-			d, ok := e.Object.(*v1.Deployment)
-			if !ok {
-				continue
+			switch x := e.Object.(type) {
+			case *v1.Pod:
+				fmt.Printf("Pod name %s: %s (%s)\n", e.Type, x.Name, x.Status.Phase)
+				for _, v := range x.Status.ContainerStatuses {
+					if v.State.Waiting != nil {
+						fmt.Printf("  %s (%s): waiting: %s\n", v.Name, v.Image, v.State.Waiting.Reason)
+					} else if v.State.Running != nil {
+						fmt.Printf("  %s (%s): running since %s\n", v.Name, v.Image, v.State.Running.StartedAt.String())
+					} else {
+						fmt.Printf("  %s (%s): terminated: %s\n", v.Name, v.Image, v.State.Terminated.Reason)
+					}
+				}
+			case *v1.ResourceQuota:
+				fmt.Printf("Resource quota %s: %s\n", e.Type, x.Name)
+			case *v1beta1.Deployment:
+				fmt.Printf("Deployment name %s: %s\n", e.Type, x.Name)
 			}
-			fmt.Printf("Deployment name: %s\n", d.Name)
 		}
 	}(c)
-	err := s.w.Load(constants.Deployments)
-	if err != nil {
-		return errors.Wrapf(err, "Load failed")
+
+	for _, rt := range constants.GetResourceTypes() {
+		err := s.w.Load(rt)
+		if err != nil {
+			fmt.Printf("Load failed (%s): %s", rt, err.Error())
+		}
 	}
-	fmt.Printf("Loaded for deployments\n")
+	fmt.Printf("Loaded\n")
 
-	// lo := metav1.ListOptions{}
-
-	// pods := s.clientset.CoreV1().Pods(namespace)
-
-	// podList, err := pods.List(lo)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// podNames := make([]string, len(podList.Items))
-	// for k, v := range podList.Items {
-	// 	podNames[k] = v.Name
-	// }
-
-	// fmt.Printf("Pod names:\n")
-	// for _, n := range podNames {
-	// 	fmt.Printf("  %s\n", n)
-	// }
-
-	// emc, err := external_metrics.NewForConfig(s.restClientConfig)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// // Want to verify that this resource exists
-	// mi := emc.NamespacedMetrics(namespace)
-	// _, err = mi.List("*", labels.Everything())
-	// if err != nil {
-	// 	fmt.Printf("Nope: %s\n", err.Error())
-	// 	return err
-	// }
-
-	// watch, err := pods.Watch(metav1.ListOptions{
-	// 	LabelSelector: "",
-	// })
-	// if err != nil {
-	// 	return err
-	// }
 	// for event := range watch.ResultChan() {
 	// 	fmt.Printf("Type: %v\n", event.Type)
 	// 	p, ok := event.Object.(*v1.Pod)

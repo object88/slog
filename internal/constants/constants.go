@@ -13,12 +13,25 @@ const (
 
 	// Pods represents the Kubernetes `pods` resource
 	Pods ResourceType = "pods"
+
+	// ResourceQuotas represent the resource limitations put on a namespace,
+	// service, etc.
+	ResourceQuotas ResourceType = "resourcequotas"
 )
+
+func GetResourceTypes() []ResourceType {
+	rts := []ResourceType{
+		Deployments,
+		Pods,
+		ResourceQuotas,
+	}
+	return rts
+}
 
 // Validate ensures that the provided ResourceType is a valid value
 func (rt ResourceType) Validate() error {
 	switch rt {
-	case Deployments, Pods:
+	case Deployments, Pods, ResourceQuotas:
 		// Valid; nothing to do
 		return nil
 	default:
